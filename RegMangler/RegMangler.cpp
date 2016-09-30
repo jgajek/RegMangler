@@ -2,15 +2,44 @@
 //
 
 #include "stdafx.h"
-#include "Windows.h"
-#include "KtmW32.h"
+#include <Windows.h>
+#include <winternl.h>
 
 #include <iostream>
 #include <string>
 
-#pragma comment(lib, "KtmW32.lib")
+#pragma comment(lib, "ntdll.lib")
 
 using namespace std;
+
+#define VID_VMWARE 0x15AD;
+#define VID_ORACLE 0x80EE;
+
+#define REG_KEY_PCI_ENUM L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Enum\\PCI"
+
+typedef enum _KEY_INFORMATION_CLASS {
+	KeyBasicInformation,
+	KeyNodeInformation,
+	KeyFullInformation,
+	KeyNameInformation,
+	KeyCachedInformation,
+	KeyFlagsInformation,
+	MaxKeyInfoClass
+} KEY_INFORMATION_CLASS;
+
+NTSTATUS NTAPI NtOpenKey(
+	_Out_	PHANDLE KeyHandle,
+	_In_	ACCESS_MASK DesiredAccess,
+	_In_	POBJECT_ATTRIBUTES ObjectAttributes
+);
+
+NTSTATUS NTAPI NtQueryKey(
+	_In_		HANDLE KeyHandle,
+	_In_		KEY_INFORMATION_CLASS KeyInformationClass,
+	_Out_opt_	PVOID KeyInformation,
+	_In_		ULONG Length,
+	_Out_		PULONG ResultLength
+);
 
 void PrintLastError(LPWSTR szApiCall)
 {
@@ -22,62 +51,21 @@ void PrintLastError(LPWSTR szApiCall)
 	LocalFree(pMsgBuf);
 }
 
+void RegEnumPCIDevices(void)
+{
+	HANDLE hKey = NULL;
+	NTSTATUS status;
+	UNICODE_STRING keyname;
+	OBJECT_ATTRIBUTES objattr;
+
+	RtlInitUnicodeString(&keyname, REG_KEY_PCI_ENUM);
+	InitializeObjectAttributes(&objattr, &keyname, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+	status = NtOpenKey(&hKey, KEY_ENUMERATE_SUB_KEYS, &objattr);
+}
+
 int wmain(int argc, WCHAR* argv[])
 {
-	HANDLE hTransaction;
-	HKEY hKey, hKey2;
-	DWORD dwDisposition;
-
-	hTransaction = CreateTransaction(NULL, NULL, 0, 0, 0, 0, NULL);
-	PrintLastError(L"CreateTransaction");
-
-	RegCreateKeyTransacted(HKEY_CURRENT_USER, L"Software\\RegMangler", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hKey, &dwDisposition, hTransaction, NULL);
-	PrintLastError(L"RegCreateKeyTransacted");
-
-	for (DWORD n = 0; n < 100; n++) {
-		RegSetValueEx(hKey, to_wstring(n).c_str(), 0, REG_DWORD, (PBYTE)&n, sizeof(DWORD));
-		PrintLastError(L"RegSetValueEx");
-	}
-
-	CommitTransaction(hTransaction);
-	PrintLastError(L"CommitTransaction");
-
-	CloseHandle(hTransaction);
-	CloseHandle(hKey);
-
-	hTransaction = CreateTransaction(NULL, NULL, 0, 0, 0, 0, NULL);
-	PrintLastError(L"CreateTransaction");
-
-	RegOpenKeyTransacted(HKEY_CURRENT_USER, L"Software\\RegMangler", 0, KEY_ALL_ACCESS, &hKey, hTransaction, NULL);
-	PrintLastError(L"RegOpenKeyTransacted");
-
-	RegCreateKeyTransacted(HKEY_CURRENT_USER, L"Software\\RegManglerCopy", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hKey2, &dwDisposition, hTransaction, NULL);
-	PrintLastError(L"RegCreateKeyTransacted");
-
-	RegCopyTree(hKey, NULL, hKey2);
-	PrintLastError(L"RegCopyTree");
-
-	CommitTransaction(hTransaction);
-	PrintLastError(L"CommitTransaction");
-
-	CloseHandle(hTransaction);
-	CloseHandle(hKey);
-	CloseHandle(hKey2);
-
-	hTransaction = CreateTransaction(NULL, NULL, 0, 0, 0, 0, NULL);
-	PrintLastError(L"CreateTransaction");
-
-	RegDeleteKeyTransacted(HKEY_CURRENT_USER, L"Software\\RegMangler", 0, 0, hTransaction, NULL);
-	PrintLastError(L"RegDeleteKeyTransacted");
-
-	RegDeleteKeyTransacted(HKEY_CURRENT_USER, L"Software\\RegManglerCopy", 0, 0, hTransaction, NULL);
-	PrintLastError(L"RegDeleteKeyTransacted");
-
-	CommitTransaction(hTransaction);
-	PrintLastError(L"CommitTransaction");
-
-	CloseHandle(hTransaction);
-	CloseHandle(hKey);
-	CloseHandle(hKey2);
+	RegEnumPCIDevices();
 	return 0;
 }
